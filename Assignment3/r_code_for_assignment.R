@@ -1,3 +1,7 @@
+# Name: Ziheng (Tony) Fang
+# MATH 252
+# Spring 2025
+# Assignment 3
 library(MASS) # needed to simulate clusters
 library(mclust) # needed to fit data on a gmm
 library(MixGHD) # needed for ARI function
