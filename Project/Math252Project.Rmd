@@ -1,0 +1,186 @@
+---
+title: "Math 252 Project"
+output:
+  html_document: default
+  pdf_document: default
+date: "2025-04-24"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)        # Data wrangling and plotting
+library(dbscan)           # DBSCAN and OPTICS
+library(fpc)              # Validation metrics
+library(cluster)          # PAM, silhouette
+library(factoextra)       # Visualization
+library(mclust)           # Gaussian mixture model
+library(ContaminatedMixt) # CN Mixture model
+library(clValid)          # Internal validation
+library(NbClust)          # Optimal number of clusters
+```
+
+```{r}
+# Load seeds dataset
+seeds <- read.table("seeds_dataset.txt", header = FALSE)
+colnames(seeds) <- c("Area", "Perimeter", "Compactness", "Kernel.Length", 
+                     "Kernel.Width", "Asymmetry.Coefficient", "Kernel.Groove.Length", "Class")
+seeds_data <- seeds %>% select(-Class) %>% na.omit()
+seeds_scaled <- scale(seeds_data)
+```
+```{r}
+bike <- read.csv("SeoulBikeDatacsv.csv", fileEncoding = "CP949")
+colnames(bike) <- c("Date", "Rented_Bike_Count", "Hour", "Temperature", 
+                    "Humidity", "Wind_Speed", "Visibility", "Dew_Point_Temp", 
+                    "Solar_Radiation", "Rainfall", "Snowfall", 
+                    "Seasons", "Holiday", "Functioning_Day")
+bike_clean <- bike %>% select(where(is.numeric)) %>% na.omit()
+bike_scaled <- scale(bike_clean)
+
+#  PCA for CN model
+# DONT INCLUDE
+total_pca <- prcomp(bike_scaled)
+bike_reduced <- total_pca$x[, 1:5]  # First 5 PCs (~80% variance)
+
+```
+```{r}
+kNNdistplot(seeds_scaled, k = 5); abline(h = 0.9, col = "red")
+kNNdistplot(bike_scaled,  k = 5); abline(h = 1.0, col = "red")
+```
+
+```{r}
+## DBSCAN
+res_dbscan_seeds <- dbscan::dbscan(seeds_scaled, eps = 0.9, minPts = 5)
+res_dbscan_bike  <- dbscan::dbscan(bike_scaled,  eps = 1.0, minPts = 5)
+
+fviz_cluster(list(data = seeds_scaled, cluster = res_dbscan_seeds$cluster), main = "DBSCAN - Seeds", shape = 19)
+fviz_cluster(list(data = bike_scaled,  cluster = res_dbscan_bike$cluster),  main = "DBSCAN - Bike", shape = 19)
+```
+```{r}
+## OPTICS
+optics_seeds <- optics(seeds_scaled, minPts = 5)
+optics_bike  <- optics(bike_scaled, minPts = 5)
+res_optics_seeds <- extractDBSCAN(optics_seeds, eps_cl = 0.9)
+res_optics_bike  <- extractDBSCAN(optics_bike, eps_cl = 1.0)
+
+fviz_cluster(list(data = seeds_scaled, cluster = res_optics_seeds$cluster), main = "OPTICS - Seeds", shape = 19)
+fviz_cluster(list(data = bike_scaled,  cluster = res_optics_bike$cluster),  main = "OPTICS - Bike", shape = 19)
+```
+```{r}
+## PAM
+res_pam_seeds <- pam(seeds_scaled, k = 3)
+res_pam_bike  <- pam(bike_scaled,  k = 3)
+
+fviz_cluster(res_pam_seeds, data = seeds_scaled, main = "PAM - Seeds", shape = 19)
+fviz_cluster(res_pam_bike,  data = bike_scaled,  main = "PAM - Bike", shape = 19)
+```
+
+```{r}
+## CN Mixture
+
+fit_best_CN_model <- function(data, G_range = 2:4) {
+  tryCatch({
+    best_model <- NULL
+    best_bic <- -Inf
+    
+    for (g in G_range) {
+      model_names <- c("EEE", "VVV", "EEV", "VEV")
+      
+      for (model_name in model_names) {
+        fit <- tryCatch({
+          fit_CNmixt(data, G = g, model = model_name)
+        }, error = function(e) NULL)
+        
+        if (!is.null(fit)) {
+          if (!is.null(fit$bic) && fit$bic > best_bic) {
+            best_bic <- fit$bic
+            best_model <- fit
+          }
+        }
+      }
+    }
+    
+    if (is.null(best_model)) {
+      warning("All CNmixt models failed. Falling back to kmeans.")
+      km <- kmeans(data, centers = mean(G_range), nstart = 10)
+      return(list(
+        cluster = km$cluster,
+        outliers = rep(FALSE, nrow(data)),
+        outlier_pct = 0,
+        modelName = "Fallback_KMeans",
+        BIC = NA,
+        parameters = NULL,
+        model = km
+      ))
+    }
+    
+    cluster <- best_model$classification
+    outliers <- best_model$outliers
+    outlier_pct <- sum(outliers) / length(outliers) * 100
+    
+    return(list(
+      cluster = cluster,
+      outliers = outliers,
+      outlier_pct = outlier_pct,
+      modelName = best_model$modelName,
+      BIC = best_model$bic,
+      G = best_model$G,  # Save best G
+      parameters = best_model$parameters,
+      model = best_model
+    ))
+    
+  }, error = function(e) {
+    warning(paste("CNmixt fitting failed:", e$message))
+    km <- kmeans(data, centers = mean(G_range), nstart = 10)
+    return(list(
+      cluster = km$cluster,
+      outliers = rep(FALSE, nrow(data)),
+      outlier_pct = 0,
+      modelName = "Fallback_KMeans",
+      BIC = NA,
+      parameters = NULL,
+      model = km
+    ))
+  })
+}
+
+
+res_cn_seeds <- fit_best_CN_model(seeds_scaled, G_range = 2:4)
+res_cn_bike  <- fit_best_CN_model(bike_reduced, G_range = 2:4)
+
+```
+
+
+```{r}
+validate <- function(data, clustering) {
+  if (length(unique(clustering)) <= 1) {
+    return(c(Silhouette = NA, Dunn = NA, CH = NA, WB = NA, Entropy = NA))
+  }
+  stats <- cluster.stats(dist(data), clustering)
+  return(c(
+    Silhouette = stats$avg.silwidth,
+    Dunn = stats$dunn,
+    CH = stats$ch,
+    WB = stats$wb.ratio,
+    Entropy = stats$entropy
+  ))
+}
+
+
+results <- rbind(
+  Seeds_DBSCAN = validate(seeds_scaled, res_dbscan_seeds$cluster),
+  Seeds_OPTICS = validate(seeds_scaled, res_optics_seeds$cluster),
+  Seeds_PAM    = validate(seeds_scaled, res_pam_seeds$clustering),
+  Seeds_CN     = validate(seeds_scaled, res_cn_seeds$cluster),
+  Bike_DBSCAN  = validate(bike_scaled,  res_dbscan_bike$cluster),
+  Bike_OPTICS  = validate(bike_scaled,  res_optics_bike$cluster),
+  Bike_PAM     = validate(bike_scaled,  res_pam_bike$clustering),
+  Bike_CN      = validate(bike_reduced, res_cn_bike$cluster)
+)
+
+print(round(results, 3))
+
+```
+
