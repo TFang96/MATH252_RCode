@@ -15,10 +15,11 @@ beans <- read.csv(
   stringsAsFactors = FALSE
 )
 
-# Function to calculate outlier metrics
+# Function to calculate outlier metrics with proper dimensionality
 calculate_outlier_metrics <- function(data_frame) {
   # Only for numeric columns
   numeric_data <- data_frame[, sapply(data_frame, is.numeric)]
+  n_dims <- ncol(numeric_data)  # Get the full dimensionality
   
   metrics <- list()
   
@@ -45,22 +46,41 @@ calculate_outlier_metrics <- function(data_frame) {
     s <- sd(x, na.rm = TRUE)
     sum((x - m)^3, na.rm = TRUE) / (n * s^3)
   })
-
+  
+  # Calculate Mahalanobis distance using full dimensionality
+  scaled_data <- scale(numeric_data)
+  mahal_dist <- mahalanobis(scaled_data, 
+                            center = colMeans(scaled_data), 
+                            cov = cov(scaled_data))
+  
+  # Identify outliers using chi-square with proper degrees of freedom
+  mahal_outliers <- mahal_dist > qchisq(0.95, df = n_dims)  # Using full dimensionality
+  mahal_outlier_percent <- sum(mahal_outliers) / length(mahal_outliers) * 100
+  
   metrics$outlier_counts <- outlier_counts
   metrics$outlier_percentages <- outlier_percentages
   metrics$overall_outlier_density <- overall_outlier_density
   metrics$skewness <- skewness_values
+  metrics$mahal_outliers <- mahal_outliers
+  metrics$mahal_outlier_percent <- mahal_outlier_percent
+  metrics$mahal_distances <- mahal_dist
   
   return(metrics)
 }
 
+# Preprocess the bean dataset to ensure all columns are properly handled
+# First, make sure we're only working with numeric columns for analysis
+beans_numeric <- beans[, sapply(beans, is.numeric)]
+cat("Numeric variables in beans dataset:", paste(names(beans_numeric), collapse=", "), "\n")
+
 # Calculate outlier metrics for both datasets
 glass_outlier_metrics <- calculate_outlier_metrics(glass)
-beans_outlier_metrics <- calculate_outlier_metrics(beans)
+beans_outlier_metrics <- calculate_outlier_metrics(beans_numeric)
 
 # Visualization for outlier patterns
 # Glass dataset outlier visualization
 glass_num_all <- glass[, sapply(glass, is.numeric)]
+n_dims_glass <- ncol(glass_num_all)
 
 # Boxplots for outlier visualization
 par(mfrow = c(3, 3), mar = c(4, 4, 2, 1))
@@ -70,15 +90,12 @@ for (nm in names(glass_num_all)) {
           horizontal = TRUE, col = "lightblue")
 }
 
-# Scatter plot with outlier (first two features)
+# Scatter plot with outliers using full-dimensional Mahalanobis distance
 glass_2 <- as.data.frame(scale(glass_num_all))[, 1:2]
 colnames(glass_2) <- c("X1", "X2")
 
-# Identify outliers in these two dimensions using Mahalanobis distance
-glass_2_mahalanobis <- mahalanobis(glass_2, 
-                                   colMeans(glass_2), 
-                                   cov(glass_2))
-glass_2$outlier <- glass_2_mahalanobis > qchisq(0.95, df = 2)
+# Use the full-dimensional Mahalanobis outliers
+glass_2$outlier <- glass_outlier_metrics$mahal_outliers
 
 # Scatter plot
 p1 <- ggplot(glass_2, aes(x = X1, y = X2, color = outlier)) +
@@ -88,8 +105,8 @@ p1 <- ggplot(glass_2, aes(x = X1, y = X2, color = outlier)) +
                      labels = c("Regular", "Outlier")) +
   labs(
     title = "Glass Dataset: Feature Distribution with Outliers",
-    subtitle = paste("Overall outlier density:", 
-                     round(glass_outlier_metrics$overall_outlier_density, 2), "%"),
+    subtitle = paste("Mahalanobis outliers (", n_dims_glass, " dimensions): ", 
+                     round(glass_outlier_metrics$mahal_outlier_percent, 2), "%"),
     x = names(glass_num_all)[1],
     y = names(glass_num_all)[2],
     color = "Point Type"
@@ -97,8 +114,10 @@ p1 <- ggplot(glass_2, aes(x = X1, y = X2, color = outlier)) +
   theme_minimal() +
   theme(legend.position = "bottom")
 p1
+
 # Beans dataset outlier visualization
-beans_num_all <- beans[, sapply(beans, is.numeric)]
+beans_num_all <- beans_numeric  # Use the preprocessed numeric-only data
+n_dims_beans <- ncol(beans_num_all)
 n_beans_vars <- ncol(beans_num_all)
 rows <- ceiling(sqrt(n_beans_vars))
 cols <- ceiling(n_beans_vars / rows)
@@ -115,11 +134,8 @@ for (nm in names(beans_num_all)) {
 beans_2 <- as.data.frame(scale(beans_num_all))[, 1:2]
 colnames(beans_2) <- c("X1", "X2")
 
-# Identify outliers in these two dimensions using Mahalanobis distance
-beans_2_mahalanobis <- mahalanobis(beans_2, 
-                                   colMeans(beans_2), 
-                                   cov(beans_2))
-beans_2$outlier <- beans_2_mahalanobis > qchisq(0.95, df = 2)
+# Use the full-dimensional Mahalanobis outliers
+beans_2$outlier <- beans_outlier_metrics$mahal_outliers
 
 # Create enhanced scatter plot
 p2 <- ggplot(beans_2, aes(x = X1, y = X2, color = outlier)) +
@@ -129,8 +145,8 @@ p2 <- ggplot(beans_2, aes(x = X1, y = X2, color = outlier)) +
                      labels = c("Regular", "Outlier")) +
   labs(
     title = "Dry Beans Dataset: Feature Distribution with Outliers",
-    subtitle = paste("Overall outlier density:", 
-                     round(beans_outlier_metrics$overall_outlier_density, 2), "%"),
+    subtitle = paste("Mahalanobis outliers (", n_dims_beans, " dimensions): ", 
+                     round(beans_outlier_metrics$mahal_outlier_percent, 2), "%"),
     x = names(beans_num_all)[1],
     y = names(beans_num_all)[2],
     color = "Point Type"
@@ -138,8 +154,44 @@ p2 <- ggplot(beans_2, aes(x = X1, y = X2, color = outlier)) +
   theme_minimal() +
   theme(legend.position = "bottom")
 p2
+
 # Print comparative outlier plots
 grid.arrange(p1, p2, ncol = 2)
+
+# Add pairs plots for better visualization (as suggested by professor)
+# For Glass dataset
+par(mfrow = c(1, 1))  # Reset the plotting environment
+if(ncol(glass_num_all) <= 8) {
+  # Color points by outlier status
+  pairs(glass_num_all, col = ifelse(glass_outlier_metrics$mahal_outliers, "red", "blue"),
+        pch = 19, cex = 0.7,
+        main = "Glass Dataset: Pairwise Relationships with Outliers Highlighted")
+} else {
+  # If too many columns, select a subset
+  cols_subset <- names(glass_num_all)[1:min(8, ncol(glass_num_all))]
+  pairs(glass_num_all[, cols_subset], 
+        col = ifelse(glass_outlier_metrics$mahal_outliers, "red", "blue"),
+        pch = 19, cex = 0.7,
+        main = "Glass Dataset: Pairwise Relationships (Subset) with Outliers Highlighted")
+}
+
+# For Beans dataset 
+par(mfrow = c(1, 1))
+
+# Select first 6 variables for better visualization (can be changed)
+bean_vars_for_pairs <- names(beans_num_all)[1:min(6, ncol(beans_num_all))]
+cat("Bean variables selected for pairs plot:", paste(bean_vars_for_pairs, collapse=", "), "\n")
+
+# Explicitly create the subset data frame
+beans_subset <- beans_num_all[, bean_vars_for_pairs, drop = FALSE]
+
+# Create the pairs plot with specific settings
+pairs(beans_subset, 
+      col = ifelse(beans_outlier_metrics$mahal_outliers, "red", "darkgreen"),
+      pch = 19, cex = 0.5,  # Smaller points for clarity
+      gap = 0.5,            # More space between panels
+      cex.labels = 1.2,     # Larger variable names
+      main = "Beans Dataset: Pairwise Relationships with Outliers Highlighted")
 
 # Prepare for clustering ------------------------------------------
 # Standardize all numeric features
@@ -469,7 +521,7 @@ ari_scores <- data.frame(
 print("Adjusted Rand Index (ARI) Comparison:")
 print(ari_scores)
 
-# Simple summary
+# summary
 cat("\n\n========== CLUSTERING ALGORITHM COMPARATIVE ANALYSIS ==========\n")
 cat("Dataset outlier characteristics:\n")
 for(ds in names(datasets)) {
