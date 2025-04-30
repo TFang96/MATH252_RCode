@@ -7,22 +7,6 @@ library(reshape2)
 library(gridExtra)
 
 # Loading datasets
-# =========================
-# Load and preprocess Breast Cancer dataset
-# =========================
-bc_data <- read.csv("C:/Users/tf245/Documents/GitHub/MATH252_RCode/Project/breast+cancer+wisconsin+original/breast-cancer-wisconsin.data", header = FALSE)
-colnames(bc_data) <- c("ID", "ClumpThickness", "UniformityCellSize", "UniformityCellShape",
-                       "MarginalAdhesion", "SingleEpithelialCellSize", "BareNuclei",
-                       "BlandChromatin", "NormalNucleoli", "Mitoses", "Class")
-
-# Clean and convert
-bc_data[bc_data == "?"] <- NA
-bc_data$BareNuclei <- as.numeric(bc_data$BareNuclei)
-bc_data <- na.omit(bc_data)
-
-# Extract labels and features from the same cleaned dataset
-bc_labels <- as.numeric(bc_data$Class)                  # label = Class column
-bc_features <- scale(bc_data[, 2:10])                   # features = columns 2 to 10
 
 # =========================
 # Load and preprocess MAGIC dataset
