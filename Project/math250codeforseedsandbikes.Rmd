@@ -1,0 +1,236 @@
+---
+title: "Math252Project4/29"
+output: html_document
+date: "2025-04-30"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+```{r}
+# Load required libraries
+library(mlbench)
+library(ggplot2)
+library(dbscan)
+library(cluster)
+library(mclust)
+library(reshape2)
+library(gridExtra)
+library(dplyr)
+
+# Load and preprocess Seeds dataset
+seeds <- read.table("seeds_dataset.txt", header = FALSE)
+colnames(seeds) <- c("Area", "Perimeter", "Compactness", "Kernel.Length", 
+                     "Kernel.Width", "Asymmetry.Coefficient", "Kernel.Groove.Length", "Class")
+seeds_data <- seeds %>% select(-Class) %>% na.omit()
+seeds_labels <- as.numeric(seeds$Class)
+seeds_scaled <- scale(seeds_data)
+
+# Load and preprocess Seoul Bike dataset
+bike <- read.csv("SeoulBikeDatacsv.csv", fileEncoding = "CP949")
+colnames(bike) <- c("Date", "Rented_Bike_Count", "Hour", "Temperature", 
+                    "Humidity", "Wind_Speed", "Visibility", "Dew_Point_Temp", 
+                    "Solar_Radiation", "Rainfall", "Snowfall", 
+                    "Seasons", "Holiday", "Functioning_Day")
+bike_clean <- bike %>% select(where(is.numeric)) %>% na.omit()
+bike_scaled <- scale(bike_clean)
+bike_labels <- rep(1, nrow(bike_scaled))  # Dummy labels for unsupervised case
+
+# Function to calculate outlier metrics
+calculate_outlier_metrics <- function(data_frame) {
+  numeric_data <- data_frame[, sapply(data_frame, is.numeric)]
+  n_dims <- ncol(numeric_data)
+  metrics <- list()
+
+  outlier_counts <- sapply(numeric_data, function(x) {
+    q1 <- quantile(x, 0.25, na.rm = TRUE)
+    q3 <- quantile(x, 0.75, na.rm = TRUE)
+    iqr <- q3 - q1
+    lower <- q1 - 1.5 * iqr
+    upper <- q3 + 1.5 * iqr
+    sum(x < lower | x > upper, na.rm = TRUE)
+  })
+
+  outlier_percentages <- outlier_counts / nrow(numeric_data) * 100
+  overall_outlier_density <- mean(outlier_percentages)
+
+  skewness_values <- sapply(numeric_data, function(x) {
+    n <- length(x)
+    m <- mean(x, na.rm = TRUE)
+    s <- sd(x, na.rm = TRUE)
+    sum((x - m)^3, na.rm = TRUE) / (n * s^3)
+  })
+
+  scaled_data <- scale(numeric_data)
+  mahal_dist <- mahalanobis(scaled_data, colMeans(scaled_data), cov(scaled_data))
+  mahal_outliers <- mahal_dist > qchisq(0.95, df = n_dims)
+  mahal_outlier_percent <- sum(mahal_outliers) / length(mahal_outliers) * 100
+
+  metrics$outlier_counts <- outlier_counts
+  metrics$outlier_percentages <- outlier_percentages
+  metrics$overall_outlier_density <- overall_outlier_density
+  metrics$skewness <- skewness_values
+  metrics$mahal_outliers <- mahal_outliers
+  metrics$mahal_outlier_percent <- mahal_outlier_percent
+  metrics$mahal_distances <- mahal_dist
+  return(metrics)
+}
+
+# Calculate outlier metrics
+seeds_outlier_metrics <- calculate_outlier_metrics(seeds_data)
+bike_outlier_metrics <- calculate_outlier_metrics(bike_clean)
+
+# Prepare datasets list
+datasets <- list(
+  Seeds = list(x = seeds_scaled, labels = seeds_labels,
+               outlier_density = seeds_outlier_metrics$overall_outlier_density),
+  Bike = list(x = bike_scaled, labels = bike_labels,
+              outlier_density = bike_outlier_metrics$overall_outlier_density)
+)
+
+# Benchmark function (shortened for brevity — paste your full original version here)
+benchmark_clust <- function(x, true_lbls) {
+  res <- list()
+  
+  # DBSCAN
+  start_time <- Sys.time()
+  eps_values <- seq(0.3, 0.8, by = 0.1)
+  best_eps <- 0.5
+  best_ari <- -1
+  
+  for (eps in eps_values) {
+    db_temp <- dbscan(x, eps = eps, minPts = 5)
+    if (length(unique(db_temp$cluster)) > 1) {
+      ari_temp <- adjustedRandIndex(db_temp$cluster, true_lbls)
+      if (ari_temp > best_ari) {
+        best_ari <- ari_temp
+        best_eps <- eps
+      }
+    }
+  }
+  
+  db <- dbscan(x, eps = best_eps, minPts = 5)
+  db_time <- difftime(Sys.time(), start_time, units = "secs")
+  res$DBSCAN_ARI <- adjustedRandIndex(db$cluster, true_lbls)
+  res$DBSCAN_params <- paste("eps =", best_eps, ", minPts = 5")
+  res$DBSCAN_time <- as.numeric(db_time)
+  res$DBSCAN_n_clusters <- length(unique(db$cluster[db$cluster > 0]))
+  res$DBSCAN_noise <- sum(db$cluster == 0) / length(db$cluster) * 100
+
+  # OPTICS
+  start_time <- Sys.time()
+  opt <- optics(x, eps = best_eps, minPts = 5)
+  eps_cl_values <- seq(0.3, 0.8, by = 0.1)
+  best_eps_cl <- best_eps
+  best_ari <- -1
+  for (eps_cl in eps_cl_values) {
+    cl_opt_temp <- extractDBSCAN(opt, eps_cl = eps_cl)$cluster
+    if (length(unique(cl_opt_temp)) > 1) {
+      ari_temp <- adjustedRandIndex(cl_opt_temp, true_lbls)
+      if (ari_temp > best_ari) {
+        best_ari <- ari_temp
+        best_eps_cl <- eps_cl
+      }
+    }
+  }
+  cl_opt <- extractDBSCAN(opt, eps_cl = best_eps_cl)$cluster
+  opt_time <- difftime(Sys.time(), start_time, units = "secs")
+  res$OPTICS_ARI <- adjustedRandIndex(cl_opt, true_lbls)
+  res$OPTICS_params <- paste("eps =", best_eps, ", eps_cl =", best_eps_cl)
+  res$OPTICS_time <- as.numeric(opt_time)
+  res$OPTICS_n_clusters <- length(unique(cl_opt[cl_opt > 0]))
+  res$OPTICS_noise <- sum(cl_opt == 0) / length(cl_opt) * 100
+
+  # PAM
+  start_time <- Sys.time()
+  k <- length(unique(true_lbls))
+  pam_result <- pam(x, k)
+  pam_time <- difftime(Sys.time(), start_time, units = "secs")
+  res$PAM_ARI <- adjustedRandIndex(pam_result$clustering, true_lbls)
+  res$PAM_params <- paste("k =", k)
+  res$PAM_time <- as.numeric(pam_time)
+  res$PAM_silhouette <- mean(pam_result$silinfo$avg.width)
+
+  # CN (Contaminated Normal Model via mclust)
+  start_time <- Sys.time()
+  model <- Mclust(x, G = k, modelNames = c("VVV", "VVI", "EEE"))
+  if (is.null(model)) {
+    res$CN_ARI <- NA
+    res$CN_params <- "Model failed"
+    res$CN_time <- NA
+    res$CN_BIC <- NA
+    res$CN_outlier_pct <- NA
+  } else {
+    cn_time <- difftime(Sys.time(), start_time, units = "secs")
+    cluster <- model$classification
+    mahal <- mahalanobis(x, model$parameters$mean[, cluster], cov(x))
+    outliers <- mahal > qchisq(0.95, df = ncol(x))
+    res$CN_ARI <- adjustedRandIndex(cluster, true_lbls)
+    res$CN_params <- paste("k =", k, ", model =", model$modelName)
+    res$CN_time <- as.numeric(cn_time)
+    res$CN_BIC <- model$bic
+    res$CN_outlier_pct <- mean(outliers) * 100
+  }
+
+  return(res)
+}
+
+
+# Run benchmarks
+results <- lapply(datasets, function(d) {
+  if (length(unique(d$labels)) == 1) {
+    cat("\nSkipping ARI benchmarking for unlabeled dataset.\n")
+    return(NULL)
+  } else {
+    cat("\nBenchmarking dataset with outlier density:", round(d$outlier_density, 2), "%\n")
+    benchmark_clust(d$x, d$labels)
+  }
+})
+
+# Process results
+results_df <- do.call(rbind, lapply(names(results), function(name) {
+  result <- results[[name]]
+  if (is.null(result)) return(NULL)
+  data.frame(
+    Dataset = name,
+    Outlier_Density = datasets[[name]]$outlier_density,
+    DBSCAN_ARI = result$DBSCAN_ARI,
+    DBSCAN_Params = result$DBSCAN_params,
+    DBSCAN_Time = result$DBSCAN_time,
+    DBSCAN_Clusters = result$DBSCAN_n_clusters,
+    DBSCAN_Noise_Pct = result$DBSCAN_noise,
+    stringsAsFactors = FALSE
+  )
+}))
+
+print(results_df)
+
+# ARI summary
+ari_scores <- data.frame(
+  Dataset = results_df$Dataset,
+  DBSCAN = results_df$DBSCAN_ARI
+)
+
+print("Adjusted Rand Index (ARI) Comparison:")
+print(ari_scores)
+
+cat("\n========== CLUSTERING ALGORITHM COMPARATIVE ANALYSIS ==========\n")
+cat("Dataset outlier characteristics:\n")
+for (ds in names(datasets)) {
+  cat(paste0("- ", ds, ": ", round(datasets[[ds]]$outlier_density, 2), "% outlier density\n"))
+}
+
+cat("\nBest performing algorithm by dataset (based on ARI):\n")
+for (i in 1:nrow(ari_scores)) {
+  algo_scores <- as.numeric(ari_scores[i, 2])
+  best_algo <- names(ari_scores)[2]
+  cat(paste0("- ", ari_scores$Dataset[i], ": ", best_algo, 
+             " (ARI = ", round(algo_scores, 3), ")\n"))
+}
+
+```
+
