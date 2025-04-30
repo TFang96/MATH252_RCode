@@ -42,6 +42,12 @@ magic_labels <- as.numeric(as.factor(magic_data$Class))
 
 magic_features <- scale(magic_data[, 1:10])
 
+# =========================
+# Load the wine dataset
+# =========================
+data(wine)
+wine <- wine
+
 # Function to calculate outlier metrics with proper dimensionality
 calculate_outlier_metrics <- function(data_frame) {
   # Only for numeric columns
@@ -95,47 +101,47 @@ calculate_outlier_metrics <- function(data_frame) {
   return(metrics)
 }
 
-# Preprocess the bean dataset to ensure all columns are properly handled
+# Preprocess the magic dataset to ensure all columns are properly handled
 # First, make sure we're only working with numeric columns for analysis
 magic_numeric <- magic_data[, sapply(magic_data, is.numeric)]
 cat("Numeric variables in magic dataset:", paste(names(magic_numeric), collapse=", "), "\n")
 
 # Calculate outlier metrics for both datasets
-bc_data_outlier_metrics <- calculate_outlier_metrics(bc_data)
+wine_data_outlier_metrics <- calculate_outlier_metrics(wine)
 magic_outlier_metrics <- calculate_outlier_metrics(magic_numeric)
 
 # Visualization for outlier patterns
-# bc_data dataset outlier visualization
-bc_data_num_all <- bc_data[, sapply(bc_data, is.numeric)]
-n_dims_bc_data <- ncol(bc_data_num_all)
+# wine dataset outlier visualization
+wine_data_num_all <- wine[, sapply(wine, is.numeric)]
+n_dims_wine <- ncol(wine_data_num_all)
 
 # Boxplots for outlier visualization
 par(mfrow = c(3, 3), mar = c(4, 4, 2, 1))
-for (nm in names(bc_data_num_all)) {
-  boxplot(bc_data_num_all[[nm]], main = paste0(nm, "\n(", 
-                                             round(bc_data_outlier_metrics$outlier_percentages[nm], 1), "% outliers)"), 
+for (nm in names(wine_data_num_all)) {
+  boxplot(wine_data_num_all[[nm]], main = paste0(nm, "\n(", 
+                                             round(wine_data_outlier_metrics$outlier_percentages[nm], 1), "% outliers)"), 
           horizontal = TRUE, col = "lightblue")
 }
 
 # Scatter plot with outliers using full-dimensional Mahalanobis distance
-bc_data_2 <- as.data.frame(scale(bc_data_num_all))[, 1:2]
-colnames(bc_data_2) <- c("X1", "X2")
+wine_data_2 <- as.data.frame(scale(wine_data_num_all))[, 1:2]
+colnames(wine_data_2) <- c("X1", "X2")
 
 # Use the full-dimensional Mahalanobis outliers
-bc_data_2$outlier <- bc_data_outlier_metrics$mahal_outliers
+wine_data_2$outlier <- wine_data_outlier_metrics$mahal_outliers
 
 # Scatter plot
-p1 <- ggplot(bc_data_2, aes(x = X1, y = X2, color = outlier)) +
+p1 <- ggplot(wine_data_2, aes(x = X1, y = X2, color = outlier)) +
   geom_point(size = 2, alpha = 0.7) +
   geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "dashed") +
   scale_color_manual(values = c("blue", "red"), 
                      labels = c("Regular", "Outlier")) +
   labs(
-    title = "bc_data Dataset: Feature Distribution with Outliers",
-    subtitle = paste("Mahalanobis outliers (", n_dims_bc_data, " dimensions): ", 
-                     round(bc_data_outlier_metrics$mahal_outlier_percent, 2), "%"),
-    x = names(bc_data_num_all)[1],
-    y = names(bc_data_num_all)[2],
+    title = "Wine Dataset: Feature Distribution with Outliers",
+    subtitle = paste("Mahalanobis outliers (", n_dims_wine, " dimensions): ", 
+                     round(wine_data_outlier_metrics$mahal_outlier_percent, 2), "%"),
+    x = names(wine_data_num_all)[1],
+    y = names(wine_data_num_all)[2],
     color = "Point Type"
   ) +
   theme_minimal() +
@@ -188,26 +194,26 @@ grid.arrange(p1, p2, ncol = 2)
 # Add pairs plots for better visualization (as suggested by professor)
 # For bc_data dataset
 par(mfrow = c(1, 1))  # Reset the plotting environment
-if(ncol(bc_data_num_all) <= 8) {
+if(ncol(wine_data_num_all) <= 8) {
   # Color points by outlier status
-  pairs(bc_data_num_all, col = ifelse(bc_data_outlier_metrics$mahal_outliers, "red", "blue"),
+  pairs(wine_data_num_all, col = ifelse(bc_data_outlier_metrics$mahal_outliers, "red", "blue"),
         pch = 19, cex = 0.7,
-        main = "bc_data Dataset: Pairwise Relationships with Outliers Highlighted")
+        main = "Wine Dataset: Pairwise Relationships with Outliers Highlighted")
 } else {
   # If too many columns, select a subset
-  cols_subset <- names(bc_data_num_all)[1:min(8, ncol(bc_data_num_all))]
-  pairs(bc_data_num_all[, cols_subset], 
-        col = ifelse(bc_data_outlier_metrics$mahal_outliers, "red", "blue"),
+  cols_subset <- names(wine_data_num_all)[1:min(8, ncol(wine_data_num_all))]
+  pairs(wine_data_num_all[, cols_subset], 
+        col = ifelse(wine_data_outlier_metrics$mahal_outliers, "red", "blue"),
         pch = 19, cex = 0.7,
-        main = "bc_data Dataset: Pairwise Relationships (Subset) with Outliers Highlighted")
+        main = "Wine Dataset: Pairwise Relationships (Subset) with Outliers Highlighted")
 }
 
 # For magic dataset 
 par(mfrow = c(1, 1))
 
 # Select first 6 variables for better visualization (can be changed)
-bean_vars_for_pairs <- names(magic_num_all)[1:min(6, ncol(magic_num_all))]
-cat("Bean variables selected for pairs plot:", paste(bean_vars_for_pairs, collapse=", "), "\n")
+magic_vars_for_pairs <- names(magic_num_all)[1:min(6, ncol(magic_num_all))]
+cat("Magic variables selected for pairs plot:", paste(magic_vars_for_pairs, collapse=", "), "\n")
 
 # Explicitly create the subset data frame
 magic_subset <- magic_num_all[, bean_vars_for_pairs, drop = FALSE]
@@ -224,9 +230,9 @@ pairs(magic_subset,
 # Ensure features and labels come from the same cleaned data
 
 # Clean and align breast cancer data
-bc_clean <- na.omit(bc_data)
-bc_data_x <- scale(bc_clean[, sapply(bc_clean, is.numeric)])
-bc_data_labels <- as.numeric(bc_clean$Class)
+wine_clean <- na.omit(wine)
+wine_data_x <- scale(wine_clean[, sapply(wine_clean, is.numeric)])
+wine_data_labels <- as.numeric(wine_clean$Type)
 
 # Clean and align magic data
 magic_clean <- na.omit(magic_data)
@@ -235,8 +241,8 @@ magic_labels <- as.numeric(as.factor(magic_clean$Class))
 
 # Final dataset list
 datasets <- list(
-  bc_data = list(x = bc_data_x, labels = bc_data_labels, 
-                 outlier_density = bc_data_outlier_metrics$overall_outlier_density),
+  wine = list(x = wine_data_x, labels = wine_data_labels, 
+                 outlier_density = wine_data_outlier_metrics$overall_outlier_density),
   magic = list(x = magic_x, labels = magic_labels, 
                outlier_density = magic_outlier_metrics$overall_outlier_density)
 )
@@ -265,7 +271,7 @@ benchmark_clust <- function(x, true_lbls) {
       # Debug check to catch vector length mismatch
       if (length(db_temp$cluster) != length(true_lbls)) {
         stop(paste(
-          "❌ Vector length mismatch:",
+          "Vector length mismatch:",
           "db_temp$cluster =", length(db_temp$cluster),
           "true_lbls =", length(true_lbls)
         ))
