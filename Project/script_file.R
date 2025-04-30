@@ -6,8 +6,6 @@ library(ContaminatedMixt) # needed to run contaminated normal
 library(NbClust) # needed to check the number of clusters a dataset has
 library(ggplot2) # needed for ggplot
 library(mclust)
-#real_estate_data <- read_excel("C:/Users/tf245/Documents/GitHub/MATH252_RCode/Project/real+estate+valuation+data+set/Real estate valuation data set.xlsx")
-
 bc_data <- read.csv("C:/Users/tf245/Documents/GitHub/MATH252_RCode/Project/breast+cancer+wisconsin+original/breast-cancer-wisconsin.data", header = FALSE)
 colnames(bc_data) <- c("ID", "ClumpThickness", "UniformityCellSize", "UniformityCellShape",
                        "MarginalAdhesion", "SingleEpithelialCellSize", "BareNuclei",
@@ -133,7 +131,7 @@ validate <- function(data, clustering) {
 }
 
 #CN for real estate
-best_fit_cn_res_estate <- fit_best_CN_model(real_estate_data)
+best_fit_cn_res_estate <- fit_best_CN_model(bc_data)
 
 #CN for magic
 best_fit_cn_res_magic <- fit_best_CN_model(magic_data_numeric)
