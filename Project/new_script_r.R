@@ -579,3 +579,34 @@ for(i in 1:nrow(ari_scores)) {
     cat(paste0("- ", ari_scores$Dataset[i], ": No valid ARI scores available\n"))
   }
 }
+#########################################################
+## Heat Maps ##
+#########################################################
+## Wine ##
+wine_numeric <- wine[, sapply(wine, is.numeric)]
+cor_matrix <- cor(scale(wine_numeric))  # or cor(wine_numeric) if unscaled
+
+heatmap(cor_matrix,
+        main = "Wine Dataset: Correlation Heatmap",
+        col = colorRampPalette(c("blue", "green", "yellow"))(100),
+        margins = c(8, 8),
+        scale = "none")
+
+## Magic ##
+cor_matrix <- cor(scale(magic_num))
+
+heatmap(cor_matrix, main = "Magic Dataset: Correlation Heatmap", col = colorRampPalette(c("blue", "green", "yellow"))(100), margins = c(8, 8), scale = "none")
+
+
+#########################################################
+## Pairwise Scatterplot Matrix ##
+#########################################################
+## Wine ##
+wine_numeric <- wine[, sapply(wine, is.numeric)]
+pairs(scale(wine_numeric),
+      main = "Wine Dataset: Pairwise Scatterplot Matrix",
+      pch = 19, cex = 0.5, col = "blue")
+
+## MAGIC ##
+pairs(scale(magic_num), main = "MAGIC Dataset: Pairwise Scatterplot Matrix", pch = 19, cex = 0.5, col = "blue")
+
