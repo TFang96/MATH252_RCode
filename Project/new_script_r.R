@@ -5,7 +5,7 @@ library(cluster)
 library(mclust)       
 library(reshape2)    
 library(gridExtra)
-
+library(readr)
 # Loading datasets
 
 # =========================

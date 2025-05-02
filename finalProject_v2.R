@@ -18,19 +18,19 @@ glass <- Glass
 data(wine, package = "datasets")
 
 # Magic dataset
-magic_data <- read_csv("C:/Users/Maggie/Downloads/Spring2025/MATH252/project/magic04.data")
+magic_data <- read_csv("C:/Users/tf245/Documents/GitHub/MATH252_RCode/Project/magic+gamma+telescope/magic04.data")
 
 # Beans dataset 
-beans <- read.csv("C:/Users/Maggie/Downloads/Spring2025/MATH252/project/bean.csv", 
+beans <- read.csv("C:/Users/tf245/Documents/GitHub/MATH252_RCode/Project/bean.csv", 
                   header = TRUE, 
                   stringsAsFactors = FALSE)
 
 # Seeds dataset
-seeds <- read.table("C:/Users/Maggie/Downloads/Spring2025/MATH252/project/seeds_dataset.txt", 
+seeds <- read.table("C:/Users/tf245/Documents/GitHub/MATH252_RCode/Project/seeds_dataset.txt", 
                     header = FALSE)
 
 # Wholesale dataset
-wholesale_data <- read.csv("C:/Users/Maggie/Downloads/Spring2025/MATH252/project/Wholesale_customers_data.csv", 
+wholesale_data <- read.csv("C:/Users/tf245/Documents/GitHub/MATH252_RCode/Project/Wholesale customers data.csv", 
                            header = TRUE, 
                            stringsAsFactors = FALSE)
 

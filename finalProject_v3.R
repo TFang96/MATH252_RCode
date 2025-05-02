@@ -18,10 +18,10 @@ glass <- Glass
 wine <- read.csv("http://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-white.csv", sep = ";")
 
 # Magic dataset
-magic_data <- read_csv("magic04.data")
+magic_data <- read_csv("C:/Users/tf245/Documents/GitHub/MATH252_RCode/Project/magic+gamma+telescope/magic04.data")
 
 # Beans dataset 
-beans <- read.csv("bean.csv", 
+beans <- read.csv("C:/Users/tf245/Documents/GitHub/MATH252_RCode/Project/bean.csv", 
                   header = TRUE, 
                   stringsAsFactors = FALSE)
 
@@ -30,7 +30,7 @@ seeds <- read.table("seeds_dataset.txt",
                     header = FALSE)
 
 # Wholesale dataset
-wholesale_data <- read.csv("wholesalecustomers.csv", 
+wholesale_data <- read.csv("Wholesale customers data.csv", 
                            header = TRUE, 
                            stringsAsFactors = FALSE)
 
