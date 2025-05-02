@@ -6,6 +6,7 @@ library(mclust)
 library(reshape2)
 library(readr)
 library(fpc)
+library(aricode)
 
 # Load datasets
 data("Glass")
@@ -157,6 +158,7 @@ benchmark_clust <- function(x, true_lbls) {
     mean(silhouette(db_clusters[valid_db], dist(x[valid_db, ]))[, 3]) else NA
   
   res$DBSCAN_ARI <- adjustedRandIndex(db_clusters, true_lbls)
+  res$DBSCAN_NMI <- NMI(true_lbls, db_clusters)
   res$DBSCAN_params <- paste("eps =", best_eps, ", minPts =", best_min_pts)
   res$DBSCAN_time <- as.numeric(db_time)
   res$DBSCAN_n_clusters <- length(unique(db_clusters[db_clusters > 0]))
@@ -186,6 +188,7 @@ benchmark_clust <- function(x, true_lbls) {
     mean(silhouette(cl_opt[valid_opt], dist(x[valid_opt, ]))[, 3]) else NA
   
   res$OPTICS_ARI <- adjustedRandIndex(cl_opt, true_lbls)
+  res$OPTICS_NMI <- NMI(true_lbls, cl_opt)
   res$OPTICS_params <- paste("minPts =", best_min_pts, ", eps_cl =", best_eps_cl)
   res$OPTICS_time <- as.numeric(opt_time)
   res$OPTICS_n_clusters <- length(unique(cl_opt[cl_opt > 0]))
@@ -198,6 +201,7 @@ benchmark_clust <- function(x, true_lbls) {
   pam_result <- pam(x, k)
   pam_time <- difftime(Sys.time(), start_time, units = "secs")
   res$PAM_ARI <- adjustedRandIndex(pam_result$clustering, true_lbls)
+  res$PAM_NMI <- NMI(true_lbls, pam_result$clustering)
   res$PAM_params <- paste("k =", k)
   res$PAM_time <- as.numeric(pam_time)
   res$PAM_silhouette <- mean(pam_result$silinfo$avg.width)
@@ -210,6 +214,7 @@ benchmark_clust <- function(x, true_lbls) {
   avg_sil_cn <- if (length(unique(cn_clusters)) > 1)
     mean(silhouette(cn_clusters, dist(x))[, 3]) else NA
   res$CN_ARI <- adjustedRandIndex(cn_clusters, true_lbls)
+  res$CN_NMI <- NMI(true_lbls, cn_clusters)
   res$CN_params <- paste("k =", k, ", model =", model$modelName)
   res$CN_time <- as.numeric(cn_time)
   res$CN_n_clusters <- length(unique(cn_clusters))
@@ -247,13 +252,17 @@ comparison_scores <- data.frame(
   OPTICS_ARI = results_df$OPTICS_ARI,
   PAM_ARI = results_df$PAM_ARI,
   CN_ARI = results_df$CN_ARI,
+  DBSCAN_NMI = results_df$DBSCAN_NMI,
+  OPTICS_NMI = results_df$OPTICS_NMI,
+  PAM_NMI = results_df$PAM_NMI,
+  CN_NMI = results_df$CN_NMI,
   DBSCAN_Silhouette = results_df$DBSCAN_silhouette,
   OPTICS_Silhouette = results_df$OPTICS_silhouette,
   PAM_Silhouette = results_df$PAM_silhouette,
   CN_Silhouette = results_df$CN_silhouette
 )
 
-cat("Adjusted Rand Index (ARI) and Silhouette Width Comparison:\n")
+cat("Adjusted Rand Index (ARI), Normalized Mutual Information (NMI), and Silhouette Width Comparison:\n")
 print(comparison_scores)
 
 cat("\n\nClustering Algorithm Summary\n")
@@ -275,5 +284,21 @@ for(i in 1:nrow(ari_scores)) {
                " (ARI = ", round(best_score, 3), ")\n"))
   } else {
     cat(paste0("- ", ari_scores$Dataset[i], ": No valid ARI scores available\n"))
+  }
+}
+
+cat("\nBest performing algorithm by dataset (based on NMI):\n")
+nmi_scores <- comparison_scores
+for(i in 1:nrow(nmi_scores)) {
+  algo_scores <- as.numeric(ari_scores[i, 6:9])
+  algo_names <- colnames(nmi_scores)[6:9]
+  valid_indices <- which(!is.na(algo_scores))
+  if(length(valid_indices) > 0) {
+    best_algo <- algo_names[which.max(algo_scores[valid_indices])]
+    best_score <- max(algo_scores[valid_indices], na.rm = TRUE)
+    cat(paste0("- ", nmi_scores$Dataset[i], ": ", best_algo, 
+               " (NMI = ", round(best_score, 3), ")\n"))
+  } else {
+    cat(paste0("- ", nmi_scores$Dataset[i], ": No valid ARI scores available\n"))
   }
 }
