@@ -2,6 +2,7 @@ library(mlbench)
 library(ggplot2)
 library(dbscan)
 library(cluster)
+library(ContaminatedMixt)
 library(mclust)
 library(reshape2)
 library(readr)
@@ -208,8 +209,28 @@ benchmark_clust <- function(x, true_lbls) {
   
   # CN (Gaussian Mixture)
   start_time <- Sys.time()
-  model <- Mclust(x, G = k)
-  cn_clusters <- model$classification
+  
+  model <- tryCatch({
+    CNmixt(x, G = k, initialization = "kmeans", alphafix = TRUE, model = "EEE")
+  }, error = function(e) {
+    cat("CNmixt failed: ", e$message, "\n")
+    return(NULL)
+  })
+  
+  # Proceed only if the object is valid and classification is complete
+  if (!is.null(model) &&
+      "classification" %in% names(model) &&
+      length(model$classification) == nrow(x)) {
+    
+    cn_clusters <- model$classification
+    # Continue with ARI/NMI etc.
+    
+  } else {
+    cat("CNmixt did not return a valid classification. Falling back to Mclust.\n")
+    model <- Mclust(x, G = k)
+    cn_clusters <- model$classification
+    # Use fallback model for metrics
+  }
   cn_time <- difftime(Sys.time(), start_time, units = "secs")
   avg_sil_cn <- if (length(unique(cn_clusters)) > 1)
     mean(silhouette(cn_clusters, dist(x))[, 3]) else NA
