@@ -209,9 +209,10 @@ benchmark_clust <- function(x, true_lbls) {
   
   # CN (Gaussian Mixture)
   start_time <- Sys.time()
-  
+  pca_result <- prcomp(x, scale. = TRUE)
+  x_reduced <- pca_result$x[, 1:min(5, ncol(pca_result$x))]
   model <- tryCatch({
-    CNmixt(x, G = k, initialization = "kmeans", alphafix = TRUE, model = "EEE")
+    CNmixt(x_reduced, G = k, initialization = "kmeans", alphafix = TRUE, model = "EEE")
   }, error = function(e) {
     cat("CNmixt failed: ", e$message, "\n")
     return(NULL)
